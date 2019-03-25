@@ -1,0 +1,35 @@
+# -*- Makefile -*-
+
+
+
+
+# put -D_TRACE if you want TRACE macros to produce output 
+# Maximum optimization level
+
+ifeq ($(VECREPORT),y)
+RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -fopt-info-vec-optimized=vecreport.txt -g3 -fstrict-aliasing $(GCCOPT)
+else
+RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -flto -g3 -fstrict-aliasing $(GCCOPT)
+endif
+
+
+
+
+ifeq ($(MKL),y)
+include MKL.x86_64
+endif 
+
+
+# put -D_NOTRACE to switch TRACE output off
+# Debug info, do not optimize
+DEBUG=$(COMMONOPT) -g3 -D_DEBUG
+
+
+ifeq ($(OPT),y)
+LOPT=-lm -lrt -lstdc++ -Ofast -fopenmp-simd -fstrict-aliasing $(GCCOPT) -flto -g3
+else
+LOPT=-lm -lrt -lstdc++ -g3
+endif
+
+LD=ld
+

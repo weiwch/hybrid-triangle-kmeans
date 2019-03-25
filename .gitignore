@@ -1,0 +1,36 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+Object/*
+
+# Precompiled Headers
+*.gch
+*.pch
+*.pyc
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+.project
+.cproject
+.cdtproject
+.settings
+.idea

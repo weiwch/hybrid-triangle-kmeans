@@ -1,0 +1,26 @@
+# Makefile Options for Sun Studio 12 Compiler for Linux.
+
+
+
+# put -D_TRACE if you want TRACE macros to produce output 
+# Maximum optimization level for Intel C++ Compiler 8.1
+# including full inter-procedural optimization
+# code optimized for Pentium IV
+
+ifneq ($(PROF),g)
+IPO=
+endif
+
+
+RELEASE=$(COMMONOPT) -Ofast -OPT:alias=restrict -ffast-math $(OPNOPT)  $(IPO)
+
+# put -D_NOTRACE to switch TRACE output off
+# Debug info, do not optimize
+DEBUG=$(COMMONOPT) -g  -D_DEBUG
+
+
+ifeq ($(OPT),y)
+LOPT=-lm  -lrt -Ofast  $(IPO) -g
+else
+LOPT=-lm -lrt -g
+endif

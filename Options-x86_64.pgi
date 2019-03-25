@@ -1,0 +1,28 @@
+# Makefile Options for PGI 2015 Compiler for Linux.
+
+
+
+# put -D_TRACE if you want TRACE macros to produce output 
+# Maximum optimization level for Intel C++ Compiler 8.1
+# including full inter-procedural optimization
+# code optimized for Pentium IV
+
+ifneq ($(PROF),g)
+IPO=
+endif
+
+
+FLAGS=-Mipa=fast,inline,safeall -Mfprelaxed -Mnovect
+
+RELEASE=$(COMMONOPT) -fast  $(PGIOPT) $(FLAGS) 
+
+# put -D_NOTRACE to switch TRACE output off
+# Debug info, do not optimize
+DEBUG=$(COMMONOPT) -g -D_DEBUG
+
+
+ifeq ($(OPT),y)
+LOPT=-lm -lrt -fast  $(PGIOPT) $(FLAGS)
+else
+LOPT=-lm -lrt -g
+endif

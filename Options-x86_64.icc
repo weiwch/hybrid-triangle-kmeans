@@ -1,0 +1,32 @@
+# Makefile Options for Intel C++ Compiler 8.1 for Linux for 32 CPUs
+
+
+
+# put -D_TRACE if you want TRACE macros to produce output 
+# Maximum optimization level for Intel C++ Compiler 8.1
+# including full inter-procedural optimization
+# code optimized for Pentium IV
+
+ifeq ($(SCALASCA),y)
+IPO=-ip
+else
+IPO=-ipo
+endif
+
+ifeq ($(VECREPORT),y)
+RELEASE=$(COMMONOPT) -qopenmp-simd -qopt-report=1 -qopt-report-phase=vec -g -Ofast $(IPO) $(ICCOPT)
+else
+RELEASE=$(COMMONOPT) -qopenmp-simd -g -Ofast $(IPO) $(ICCOPT)
+endif
+
+# put -D_NOTRACE to switch TRACE output off
+# Debug info, do not optimize
+DEBUG=$(COMMONOPT) -g -D_DEBUG
+
+
+ifeq ($(OPT),y)
+LOPT=-lm -lrt $(IPO) $(ICCOPT) -g
+else
+LOPT=-lm -lrt -g
+endif
+LD=xild
