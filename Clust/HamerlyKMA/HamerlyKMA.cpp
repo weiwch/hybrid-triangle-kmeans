@@ -88,7 +88,7 @@ bool HamerlyKMA::OuterLoop(Array<OPTFLOAT> &vec, long *distanceCount) {
 	const int rowCount = Data.GetRowCount();
 	long count = 0;
 
-#pragma omp parallel default(none) shared(vec) private(assignment, m, a) \
+#pragma omp parallel default(none) shared(vec) private(assignment, m, a) firstprivate(rowCount) \
 	reduction(+ : count) reduction(|| : cont)
 	{
 		ResetOMPData();
@@ -157,7 +157,7 @@ void HamerlyKMA::InitDataStructures(Array<OPTFLOAT> &vec) {
 	}
 
 	const int rowCount = Data.GetRowCount();
-#pragma omp parallel default(none) shared(vec)
+#pragma omp parallel default(none) shared(vec) firstprivate(rowCount)
 	{
 		int threadId = omp_get_thread_num();
 		ThreadPrivateVector<int> &DeltaCounts = pOMPReducer->GetThreadCounts(threadId);
@@ -190,7 +190,7 @@ EXPFLOAT HamerlyKMA::ComputeSSE(const Array<OPTFLOAT> &vec) {
 	EXPFLOAT ret = 0;
 	const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel for default(none) shared(vec) reduction(+ : ret)
+#pragma omp parallel for default(none) shared(vec) firstprivate(rowCount) reduction(+ : ret)
 	for (int i = 0; i < rowCount; i++) {
 		ret += CV.SquaredDistance(Assignment[i], vec, Data.GetRowNew(i));
 	}
