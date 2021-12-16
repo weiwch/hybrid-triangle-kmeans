@@ -223,7 +223,7 @@ EXPFLOAT ElkanKMA::ComputeSSE(const Array<OPTFLOAT> &vec) {
 	EXPFLOAT ret = 0;
 	const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel for default(none) shared(vec) reduction(+ : ret)
+#pragma omp parallel for default(none) shared(vec) firstprivate(rowCount) reduction(+ : ret)
 	for (int i = 0; i < rowCount; i++) {
 		ret += CV.SquaredDistance(Assignment[i], vec, Data.GetRowNew(i));
 	}

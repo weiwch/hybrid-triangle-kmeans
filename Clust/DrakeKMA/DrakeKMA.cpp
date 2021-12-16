@@ -104,7 +104,7 @@ bool DrakeKMA::OuterLoop(Array<OPTFLOAT> &vec, long *distanceCount) {
 	int maxActiveB = 1;
 
 #pragma omp parallel default(none) shared(vec) private(assignment, m) \
-	reduction(+ : count) reduction(|| : cont) reduction(max: maxActiveB)
+	reduction(+ : count) reduction(|| : cont) firstprivate(rowCount) reduction(max: maxActiveB)
 	{
 		const int threadNum = omp_get_thread_num();
 		ThreadPrivateVector<OPTFLOAT> &myCenter = pOMPReducer->GetThreadCenter(threadNum);
@@ -203,7 +203,7 @@ EXPFLOAT DrakeKMA::ComputeSSE(const Array<OPTFLOAT> &vec) {
 	EXPFLOAT ret = 0;
 	const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel for default(none) shared(vec) reduction(+ : ret)
+#pragma omp parallel for default(none) shared(vec) firstprivate(rowCount) reduction(+ : ret)
 	for (int i = 0; i < rowCount; i++) {
 		ret += CV.SquaredDistance(Assignment[i], vec, Data.GetRowNew(i));
 	}
@@ -249,7 +249,7 @@ void DrakeKMA::UpdateBounds() {
 
         const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel for default(none) firstprivate(tmp)
+#pragma omp parallel for default(none) firstprivate(tmp) firstprivate(rowCount)
 	for (int i = 0; i < rowCount; i++) {
 		UpperBounds[i] += DistanceMoved[Assignment[i]];
 		LowerBounds(i, B - 1) -= tmp;
