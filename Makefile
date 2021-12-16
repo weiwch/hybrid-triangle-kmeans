@@ -33,7 +33,7 @@ endif
 #ifeq ($(GCC),y)
 #gcc options
 
-CC=g++-5
+CC=g++
 
 ifeq ($(OPENMP),y)
 OMP=-fopenmp
