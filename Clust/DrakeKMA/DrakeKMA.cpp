@@ -188,7 +188,7 @@ void DrakeKMA::InitDataStructures(Array<OPTFLOAT> &vec) {
 
 	const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel default(none) shared(vec)
+#pragma omp parallel default(none) shared(vec) firstprivate(rowCount)
 	{
 		ThreadPrivateVector<OPTFLOAT> &tpRow=OMPData[omp_get_thread_num()].row;
 #pragma omp for

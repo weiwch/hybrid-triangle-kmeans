@@ -129,7 +129,7 @@ void AnnulusKMA::InitDataStructures(Array<OPTFLOAT> &vec) {
 	HamerlyKMA::InitDataStructures(vec);
 	const int rowCount = Data.GetRowCount();
 
-#pragma omp parallel for default(none)
+#pragma omp parallel for default(none) firstprivate(rowCount)
 	for (int i = 0; i < rowCount; i++) {
 		PointNorm[i] = std::sqrt(CV.SquaredRowNorm(Data.GetRowNew(i)));
 	}
@@ -205,7 +205,7 @@ bool AnnulusKMA::OuterLoop(Array<OPTFLOAT> &vec, long *distanceCount) {
 	const int rowCount = Data.GetRowCount();
 	long count = 0;
 
-#pragma omp parallel default(none) shared(vec) private(m, r, distance, lower, upper) \
+#pragma omp parallel default(none) shared(vec) private(m, r, distance, lower, upper) firstprivate(rowCount) \
 	reduction(+ : count) reduction(|| : cont)
 	{
 		ResetOMPData();
