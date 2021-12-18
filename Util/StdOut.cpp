@@ -39,8 +39,10 @@ int kma_printf (const char *format, ...) {
 	va_list ap;
 	va_start(ap,format);
 	StdOut *pInst=StdOut::GetInstance();
+	int Ret=0;
 	if (pInst!=NULL)
-		pInst->printf(format,ap);
+		Ret=pInst->printf(format,ap);
 	va_end(ap);
+	return Ret;
 }
 
