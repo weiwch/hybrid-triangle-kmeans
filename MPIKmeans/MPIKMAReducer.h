@@ -18,6 +18,7 @@ public:
 
 	/// TODO Reduction operation without Fit required for triangle based algs.
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit)=0;
+	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure)=0;
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont)=0;
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit,int &MaxB)=0;
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont,int &MaxB)=0;
@@ -35,6 +36,7 @@ public:
 	SimpleReducer(int nclus,int ncols,int param);
 	virtual const char *GetName() {return "simple blocking";}
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit);
+	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit,int &MaxB);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont,int &MaxB);
@@ -48,6 +50,7 @@ public:
 	NonBlockingReducer(int nclus,int ncols);
 	virtual const char *GetName() {return "simple nonblocking";}
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit);
+	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit,int &MaxB);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont,int &MaxB);
@@ -62,13 +65,15 @@ protected:
 	ThreadPrivateVector<char> Buffer;
 
 	/// We assume that sizeof(EXPFLOAT) >= sizeof(bool)
-	int GetPackSize() const {return sizeof(OPTFLOAT)*nClusters*nCols+sizeof(int)*nClusters+sizeof(EXPFLOAT); }
+	int GetPackSize() const {return sizeof(OPTFLOAT)*nClusters*nCols+sizeof(int)*nClusters+sizeof(EXPFLOAT)*2; }
 
 
 	void PackData(const ThreadPrivateVector<OPTFLOAT> &Centers,const ThreadPrivateVector<int> &Counts,const EXPFLOAT &Fit);
+	void PackData(const ThreadPrivateVector<OPTFLOAT> &Centers,const ThreadPrivateVector<int> &Counts,const EXPFLOAT &Fit, const EXPFLOAT &Fit_pure);
 	void PackData(const ThreadPrivateVector<OPTFLOAT> &Centers,const ThreadPrivateVector<int> &Counts,const bool &Cont);
 
 	void UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit);
+	void UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure);
 	void UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &Cont);
 
 public:
@@ -76,6 +81,7 @@ public:
 	PackedReducer(int nclus,int ncols);
 	virtual const char *GetName() {return "packed";}
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit);
+	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure);
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont);
 	// reduction for DrakeKMA not implemented yet
 	virtual void ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit,int &MaxB) {}

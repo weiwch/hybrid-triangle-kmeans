@@ -5,6 +5,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <utility>
+
 
 #include "../Util/OpenMP.h"
 #include "../Util/StdOut.h"
@@ -15,7 +17,23 @@
 int KMeansAlgorithm::LastIter;
 double KMeansAlgorithm::LastTime;
 
-
+std::pair<double, double> main_stdev(int *cnt, int n, bool verbose)
+{   
+    double mean = 0;
+    for(int i = 0; i < n; i++){
+        mean += cnt[i];
+    }
+    mean /= n;
+    double stddev = 0;
+    for(int i = 0; i < n; i++){
+        stddev += (cnt[i] - mean) * (cnt[i] - mean);
+    }
+    stddev = sqrt(stddev / n);
+    if(verbose){
+        kma_printf("mean: %lf, stddev: %lf, cv: %lf\n", mean, stddev, stddev / mean);
+    }
+    return std::pair<double, double>(mean, stddev);
+}
 
 KMeansAlgorithm::KMeansAlgorithm(CentroidVector &aCV,StdDataset &D,CentroidRepair *pR) : CV(aCV),Data(D)
 {
@@ -58,8 +76,8 @@ double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double Min
 	ASSERT(vec.GetSize()==ncols*nclusters);
 	volatile double diff;
 	int i;
-        long distanceCount = 0;
-        double distanceCalculationsRatio=0;
+        long distanceCount = 0; // distance calculations counter 
+        double distanceCalculationsRatio=0; // (for naive KMA, it will be 100)
         double distanceCalculationsRatioSum=0;
 	double BestFit=std::numeric_limits<double>::max();
 	PrecisionTimer T(CLOCK_MONOTONIC);
@@ -79,11 +97,12 @@ double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double Min
 
 		double Fit=ComputeMSEAndCorrect(vec, &distanceCount);
 	  	double iterTime=T.GetTimeDiff();
-
+		
 	  	LastIter=i;
 	  	LastTime=iterTime;
 
-        distanceCalculationsRatio = ((double) (distanceCount / (double) (nclusters * Data.GetTotalRowCount()))) * 100;
+        distanceCalculationsRatio = ((double) distanceCount / nclusters /Data.GetTotalRowCount()) * 100;
+		kma_printf("Iteration %d, distanceCount: %ld, distanceCalculationsRatio: %lf\n",i, distanceCount, distanceCalculationsRatio);
         distanceCalculationsRatioSum += distanceCalculationsRatio;
 		double Rel=(BestFit-Fit)/BestFit;
 		if (Fit<nextafter(Fit,BestFit) ) {
@@ -128,8 +147,8 @@ double KMeansAlgorithm::RunKMeansWithSR(Array<OPTFLOAT> &vec, bool print,double 
 }
 
 
-NaiveKMA::NaiveKMA(CentroidVector &aCV,StdDataset &Data,CentroidRepair *pR) : KMeansAlgorithm(aCV,Data,pR),
-					KMeansWithoutMSE(CV,Data,KMeansAlgorithm::IterCount) {
+NaiveKMA::NaiveKMA(CentroidVector &aCV,StdDataset &Data,CentroidRepair *pR, double lambda) : KMeansAlgorithm(aCV,Data,pR),
+					KMeansWithoutMSE(CV,Data,KMeansAlgorithm::IterCount), Lambda(lambda) {
 	Center.SetSize(nclusters*ncols);
 	Counts.SetSize(nclusters);
 	Assignment.SetSize(Data.GetRowCount());
@@ -166,8 +185,8 @@ void NaiveKMA::InitDataStructures(Array<OPTFLOAT> &vec) {
 bool NaiveKMA::CorrectWithoutMSE(Array<OPTFLOAT> &vec, long *distanceCount) {
 	for(int i=0;i<nclusters*ncols;i++)
 		Center[i]=0.0;
-	for(int i=0;i<nclusters;i++)
-		Counts[i]=0;
+	// for(int i=0;i<nclusters;i++)
+	// 	Counts[i]=0;
 
 	int NThreads=omp_get_max_threads();
 
@@ -188,7 +207,7 @@ bool NaiveKMA::CorrectWithoutMSE(Array<OPTFLOAT> &vec, long *distanceCount) {
 			OPTFLOAT minssq=std::numeric_limits<OPTFLOAT>::max();
 			int bestj=-1;
 			for(int j=0;j<nclusters;j++) {
-				OPTFLOAT ssq=CV.SquaredDistance(j,vec,tpRow);
+				OPTFLOAT ssq=CV.SquaredDistance(j,vec,tpRow) ;//+ 0.00001*Counts[j]; 
 				if (ssq<minssq) {
 					minssq=ssq;
 					bestj=j;
@@ -225,13 +244,18 @@ double NaiveKMA::ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount)
 {
 	for(int i=0;i<nclusters*ncols;i++)
 		Center[i]=0.0;
-	for(int i=0;i<nclusters;i++)
-		Counts[i]=0;
-
+	// for(int i=0;i<nclusters;i++)
+	// 	Counts[i]=0;
+	// for(int i=0;i<100;i++)
+	// 	kma_printf("%d\n", Counts[i]);
 	int NThreads=omp_get_max_threads();
 
 	EXPFLOAT fit=(EXPFLOAT)0.0;
-#pragma omp parallel  shared(vec) reduction(+:fit)
+	EXPFLOAT fit_pure_sse=(EXPFLOAT)0.0;
+	EXPFLOAT w = (EXPFLOAT)Lambda * prev_fit / (EXPFLOAT)Data.GetTotalRowCount() * nclusters / Data.GetColCount();
+	if(Lambda > 0.0)
+		kma_printf("Lambda: %g, w: %g, prev_fit: %g\n", Lambda, w, prev_fit);
+#pragma omp parallel  shared(vec) reduction(+:fit, fit_pure_sse)
 	{
 		fit=0.0;
 		int ThreadId=omp_get_thread_num();
@@ -242,23 +266,33 @@ double NaiveKMA::ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount)
 		pOMPReducer->ClearThreadData(ThreadId);
 #pragma omp for OMPDYNAMIC
 		for(int i=0;i<Data.GetRowCount();i++) {
-			CV.ConvertToOptFloat(tpRow,Data.GetRowNew(i));
+			CV.ConvertToOptFloat(tpRow,Data.GetRowNew(i)); // CV: CentroidVector
 			OPTFLOAT minssq=std::numeric_limits<OPTFLOAT>::max();
+			OPTFLOAT minsse=std::numeric_limits<OPTFLOAT>::max();
 			int bestj=-1;
 			for(int j=0;j<nclusters;j++) {
-				OPTFLOAT ssq=CV.SquaredDistance(j,vec,tpRow);
+				OPTFLOAT sse=CV.SquaredDistance(j,vec,tpRow);
+				OPTFLOAT ssq= sse + w*Counts[j];
 				if (ssq<minssq) {
-					minssq=ssq;
+					minssq = ssq;
+					minsse = sse;
 					bestj=j;
 				}
 			}
 			fit+=minssq;
+			fit_pure_sse+=minsse;
 			myCounts[bestj]++;
 			CV.AddRow(bestj,myCenter,tpRow);
 		}
 	}
+	#pragma omp for simd
+	for(int i=0;i<nclusters;i++)
+		Counts[i]=0;
 	pOMPReducer->ReduceToArrays(Center,Counts);
-	ReduceMPIData(Center,Counts,fit);
+	ReduceMPIData(Center,Counts,fit,fit_pure_sse);
+	auto mean_stddev = main_stdev(Counts.GetData(), nclusters, true);
+	prev_fit = fit_pure_sse/(double)Data.GetTotalRowCount();
+	kma_printf("Fit: %g, Pure MSE: %g\n", fit/(double)Data.GetTotalRowCount(), prev_fit);
 
 	for(int i=0;i<nclusters;i++) {
 		if (Counts[i]>0) {

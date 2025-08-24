@@ -7,9 +7,9 @@
 # Maximum optimization level
 
 ifeq ($(VECREPORT),y)
-RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -fopt-info-vec-optimized=vecreport.txt -g3 -fstrict-aliasing $(GCCOPT)
+RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -fopt-info-vec-optimized=vecreport.txt -fstrict-aliasing $(GCCOPT)
 else
-RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -flto -g3 -fstrict-aliasing $(GCCOPT)
+RELEASE=$(COMMONOPT) -Ofast -fopenmp-simd -flto -fstrict-aliasing $(GCCOPT)
 endif
 
 
@@ -26,7 +26,7 @@ DEBUG=$(COMMONOPT) -g3 -D_DEBUG
 
 
 ifeq ($(OPT),y)
-LOPT=-lm -lrt -lstdc++ -Ofast -fopenmp-simd -fstrict-aliasing $(GCCOPT) -flto -g3
+LOPT=-lm -lrt -lstdc++ -Ofast -fopenmp-simd -fstrict-aliasing $(GCCOPT) -flto
 else
 LOPT=-lm -lrt -lstdc++ -g3
 endif

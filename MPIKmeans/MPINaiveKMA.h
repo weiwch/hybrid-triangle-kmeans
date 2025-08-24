@@ -23,7 +23,7 @@ protected:
 public:
 	MPINaiveKMA(CentroidVector &aCV,DistributedNumaDataset &D,CentroidRepair *pRepair,MPIKMAReducer *pR);
 
-	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit);
+	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure);
 	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont);
 
 	virtual ~MPINaiveKMA();

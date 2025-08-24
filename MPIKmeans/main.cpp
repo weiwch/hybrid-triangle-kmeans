@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sched.h>
 #include <numa.h>
+#include <string>
 
 
 #include "../Util/PrecisionTimer.h"
@@ -23,6 +24,7 @@
 #include "MPIRank0StdOut.h"
 #include "MPICentroidRandomRepair.h"
 #include "../Clust/CentroidVector.h"
+#include <sys/stat.h>
 
 
 double hugepagespernode=1.0;
@@ -47,6 +49,8 @@ int maxiter=0;
 int b = ncl - 1;
 bool adaptiveDrake = false;
 int reducerparam=-1;
+double lambda=0.0; // default lambda value for NaiveKMA
+std::string save_path = "./save";
 
 enum AlgorithmType {
 	ELKAN,
@@ -78,7 +82,7 @@ void ProcessArgs(int argc, char *argv[])
 	int c;
 	int Rank;
 	MPI_Comm_rank(MPI_COMM_WORLD,&Rank);
-	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:I:d:Dt:"))!=-1){
+	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:I:d:Dt:s:l:"))!=-1){
 		switch(c) {
 			case 'C':
 				yykmcluster=false;
@@ -96,7 +100,7 @@ void ProcessArgs(int argc, char *argv[])
 			case 'R':
 					minrel=atof(optarg);
 					if (minrel<0 || minrel >=1) {
-						printf("%s is an invalid value of -R option\n",optarg);
+						kma_printf("%s is an invalid value of -R option\n",optarg);
 						ExitUsage();
 					}
 					break;
@@ -176,7 +180,12 @@ void ProcessArgs(int argc, char *argv[])
 						iname=optarg;
 					}
 					break;
-
+			case 's':
+					save_path = optarg;
+					break;
+			case 'l':
+					lambda = atof(optarg);
+					break;
 			default: ExitUsage();
 					break;
 		}
@@ -452,7 +461,7 @@ double LocalKMeans(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinRel,Distr
 			pKMANoMSE->RunKMeansWithoutMSE(vec,verbosity);
 			BestFit=0.0;
 		} else
-			BestFit = pKMA->RunKMeans(vec, verbosity, MinRel,maxiter);
+			BestFit = pKMA->RunKMeans(vec, verbosity, MinRel, maxiter);
 		MPI_Barrier(MPI_COMM_WORLD);
 		double extime2_monotonic=TMonotonic.GetTimeDiff();
         double extime2_thread=TThread.GetTimeDiff();
@@ -484,6 +493,123 @@ void DoPs(int Rank) {
 	system(Buffer);
 }
 
+double LocalKMeansBalanced(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinRel,DistributedNumaDataset &D, std::string &save_path) {
+
+	int nCols=D.GetColCount(); // dim
+
+	CentroidVector CV(ncl,nCols);
+	KMeansInitializer *pInit=CreateMPIKMInitializer(initializerType,D,fname,CV,ncl);
+	MPIKMAReducer *pReducer=MPIKMAReducer::CreateReducer(reducer,ncl,nCols,reducerparam);
+	MPICentroidRandomRepair R(D,ncl);
+
+	if (pReducer==NULL) {
+			kma_printf("Bad KMA reducer\n");
+			MPI_Finalize();
+			exit(0);
+	}
+	if (reducerbench>0) {
+		pReducer->Benchmark(reducerbench);
+		delete pReducer;
+		return 0.0;
+	}
+	kma_printf("Using KMA reducer: %s\n",pReducer->GetName());
+	kma_printf("Reduction portion: ");
+	if (reducerparam==-1)
+		kma_printf("all centroids\n");
+	else
+		kma_printf("%d centroids\n",reducerparam);
+	NaiveKMA *pKMA=dynamic_cast<NaiveKMA*>(CreateMPIKMAlgorithm(algorithmType, nomse, CV, D, &R, pReducer,groups,yykmcluster));
+	
+	if(pKMA == NULL) {
+		kma_printf("Failed to cast KMeansAlgorithm to NaiveKMA.\n");
+		MPI_Finalize();
+		exit(0);
+	}
+
+	pKMA->Lambda = lambda; // set lambda for NaiveKMA
+	double BestFit;
+
+	if (verbosity>4)
+		pKMA->PrintNumaLocalityInfo();
+
+	for(int i=0;i<repetitions;i++) {
+		InitRNGs();
+		pKMA->ResetIterCount();
+		pInit->Init(vec);
+
+		timespec tpstart_monotonic,tpend_monotonic;
+        timespec tpstart_thread,tpend_thread;
+
+		if (verbosity>0)
+			kma_printf("Timing started\n");
+		fflush(stdout);
+		fsync(stdout->_fileno);
+		MPI_Barrier(MPI_COMM_WORLD);
+
+		PrecisionTimer TMonotonic(CLOCK_MONOTONIC_RAW), TThread(CLOCK_THREAD_CPUTIME_ID);
+		if (nomse) {
+			KMeansWithoutMSE *pKMANoMSE=dynamic_cast<KMeansWithoutMSE *> (pKMA);
+			if (pKMANoMSE==NULL) {
+				kma_printf("No MSE - less version of this algorithm");
+				return 0.0;
+			}
+			pKMANoMSE->RunKMeansWithoutMSE(vec,verbosity);
+			BestFit=0.0;
+		} else
+			BestFit = pKMA->RunKMeans(vec, verbosity, MinRel,maxiter);
+		MPI_Barrier(MPI_COMM_WORLD);
+		double extime2_monotonic=TMonotonic.GetTimeDiff();
+        double extime2_thread=TThread.GetTimeDiff();
+
+		// write cluster centoriod and assignment
+		kma_printf("Writing cluster centoriod and assignment\n");
+		// check if save_path exists
+		if (access(save_path.c_str(), F_OK) == -1) {
+			if (mkdir(save_path.c_str(), 0755) == -1) {
+				kma_printf("Cannot create directory %s\n", save_path.c_str());
+				MPI_Finalize();
+				exit(0);
+			}
+		}
+		FILE *ctf = fopen((save_path + std::string("/centroids.bin")).c_str(), "wb");
+		if (ctf == NULL) {
+			kma_printf("Cannot open centroids.bin for writing\n");
+			MPI_Finalize();
+			exit(0);
+		}else{
+			// write centroids to fbin
+			fwrite(&ncl, sizeof(int), 1, ctf);
+			fwrite(&nCols, sizeof(int), 1, ctf);
+			fwrite(vec.GetData(), sizeof(OPTFLOAT), ncl * nCols, ctf);
+			fclose(ctf);
+		}
+		
+		FILE *asf = fopen((save_path + std::string("/assignments.bin")).c_str(), "wb");
+		if (asf == NULL) {
+			kma_printf("Cannot open assignments.bin for writing\n");
+			MPI_Finalize();
+			exit(0);
+		}else{
+			// write assignments to fbin
+			int totalRows = D.GetTotalRowCount();
+			fwrite(pKMA->Assignment.GetData(), sizeof(int), totalRows, asf);
+			fclose(asf);
+		}
+
+        if (verbosity>0)
+			kma_printf("Timing finished\n");
+
+		int Rank;
+		MPI_Comm_rank(MPI_COMM_WORLD,&Rank);
+
+		PrintTimingInfo(extime2_monotonic,extime2_thread,pKMA->GetIterCount());
+
+	}
+	delete pKMA;
+	delete pInit;
+	delete pReducer;
+	return BestFit;
+}
 
 int main(int argc, char *argv[])
 {
@@ -499,16 +625,14 @@ int main(int argc, char *argv[])
 	MPI_Comm_rank(MPI_COMM_WORLD,&Rank);
 	MPI_Comm_size(MPI_COMM_WORLD,&Size);
 
-	ProcessArgs(argc,argv);
-	if (verbosity>=0)
-		MPIRank0StdOut::Init();
-	else
-		EmptyStdOut::Init();
+	MPIRank0StdOut::Init();
+	ProcessArgs(argc,argv);;
+
+	kma_printf("MPI K-means with %d processes\n",Size);
 
 
-
-	if (verbosity>1	)
-		DoPs(Rank);
+	// if (verbosity>1	)
+	// 	DoPs(Rank);
 
 	if (minrel>0.0 && nomse) {
 		kma_printf("-m and -R options are not compatible\n");
@@ -558,9 +682,9 @@ int main(int argc, char *argv[])
 
 
 	DynamicArray<OPTFLOAT> vec(ncl*nCols);
-	LocalKMeans(vec,verbosity,minrel,D);
-	if (verbosity>1)
-		PrintMPIandCPUInfo(Rank);
+	LocalKMeansBalanced(vec,verbosity,minrel,D, save_path);
+	// if (verbosity>1)
+	// 	PrintMPIandCPUInfo(Rank);
 	DestroyRNGs();
 	delete pAlloc;
 	MPI_Finalize();

@@ -25,8 +25,8 @@ void MPINaiveKMA::PrintAvgAvoidance(double Avoided) {
 }*/
 
 
-void MPINaiveKMA::ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit) {
-	pReducer->ReduceData(Centers,Counts,Fit);
+void MPINaiveKMA::ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {
+	pReducer->ReduceData(Centers,Counts,Fit,Fit_pure);
 }
 
 void MPINaiveKMA::ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont) {

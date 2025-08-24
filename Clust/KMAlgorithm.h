@@ -91,6 +91,10 @@ struct NaiveThreadData {
  * using OpenMP. It scales very well (tested on the 64-core mordor3 server)
  */
 class NaiveKMA : public KMeansAlgorithm, public KMeansWithoutMSE {
+public:
+	LargeVector<int> Assignment;
+	double Lambda;
+	double prev_fit = 0.0; // previous fit value
 protected:
 
 	/// The centroids of the new clusters
@@ -106,13 +110,10 @@ protected:
 
 	DynamicArray<NaiveThreadData> OMPData;
 
-	LargeVector<int> Assignment;
-
-
 	OpenMPKMAReducer *pOMPReducer;
 
 	/// Future Data reduction for version MPI, now empty
-	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit) {}
+	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {}
 	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont) {}
 public:
 	virtual void PrintNumaLocalityInfo();
@@ -120,7 +121,7 @@ public:
 	virtual void InitDataStructures(Array<OPTFLOAT> &vec);
 
 	virtual double ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount=NULL);
-	NaiveKMA(CentroidVector &aCV,StdDataset &Data,CentroidRepair *pR);
+	NaiveKMA(CentroidVector &aCV,StdDataset &Data,CentroidRepair *pR, double lambda=0.0);
 	~NaiveKMA();
 };
 

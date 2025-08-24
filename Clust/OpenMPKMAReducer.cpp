@@ -124,6 +124,7 @@ void NaiveOpenMPReducer::ReduceToArrays(ThreadPrivateVector <OPTFLOAT> &Center,T
 	}
 }
 
+// Tree-based Reduction
 Log2OpenMPReducer::Log2OpenMPReducer(CentroidVector &CV) : OpenMPKMAReducer(CV) {
 
 }

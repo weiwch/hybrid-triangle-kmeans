@@ -93,6 +93,20 @@ void SimpleReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPriv
 }
 
 
+void SimpleReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {
+
+	if (Portion==-1) {
+		MPI_Allreduce(MPI_IN_PLACE,Centers.GetData(),Centers.GetSize(),OptFloatType(),MPI_SUM,MPI_COMM_WORLD);
+	}	else {
+		for(int i=0;i<nClusters;i+=Portion)
+			MPI_Allreduce(MPI_IN_PLACE,Centers.GetData()+i*nCols,Portion*nCols,OptFloatType(),MPI_SUM,MPI_COMM_WORLD);
+	}
+		MPI_Allreduce(MPI_IN_PLACE,Counts.GetData(),Counts.GetSize(),MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+		MPI_Allreduce(MPI_IN_PLACE,&Fit,1,ExpFloatType(),MPI_SUM,MPI_COMM_WORLD);
+		MPI_Allreduce(MPI_IN_PLACE,&Fit_pure,1,ExpFloatType(),MPI_SUM,MPI_COMM_WORLD);
+
+}
+
 void SimpleReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont) {
 	int ConvertedCont=bCont;
 
@@ -150,6 +164,21 @@ void NonBlockingReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,Threa
 	MPI_Iallreduce(MPI_IN_PLACE,&Fit,1,ExpFloatType(),MPI_SUM,MPI_COMM_WORLD,&reqtab[2]);
 
 	MPI_Waitall(3,reqtab,stattab);
+
+}
+
+void NonBlockingReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {
+
+
+	MPI_Request reqtab[4];
+	MPI_Status stattab[4];
+
+	MPI_Iallreduce(MPI_IN_PLACE,Centers.GetData(),Centers.GetSize(),OptFloatType(),MPI_SUM,MPI_COMM_WORLD,&reqtab[0]);
+	MPI_Iallreduce(MPI_IN_PLACE,Counts.GetData(),Counts.GetSize(),MPI_INT,MPI_SUM,MPI_COMM_WORLD,&reqtab[1]);
+	MPI_Iallreduce(MPI_IN_PLACE,&Fit,1,ExpFloatType(),MPI_SUM,MPI_COMM_WORLD,&reqtab[2]);
+	MPI_Iallreduce(MPI_IN_PLACE,&Fit_pure,1,ExpFloatType(),MPI_SUM,MPI_COMM_WORLD,&reqtab[3]);
+
+	MPI_Waitall(4,reqtab,stattab);
 
 }
 
@@ -296,6 +325,24 @@ void PackedReducer::UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPriv
 
 }
 
+void PackedReducer::UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {
+	char *ptr=Buffer.GetData();
+	int nBytes=Centers.GetSize()*sizeof(OPTFLOAT);
+	memcpy(Centers.GetData(),ptr,nBytes);
+	ptr+=nBytes;
+
+	nBytes=Counts.GetSize()*sizeof(int);
+	memcpy(Counts.GetData(),ptr,nBytes);
+	ptr+=nBytes;
+
+	nBytes=sizeof(EXPFLOAT);
+	memcpy(&Fit,ptr,nBytes);
+	ptr+=nBytes;
+
+	memcpy(&Fit_pure,ptr,nBytes);
+
+}
+
 void PackedReducer::UnpackData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &Cont) {
 	char *ptr=Buffer.GetData();
 	int nBytes=Centers.GetSize()*sizeof(OPTFLOAT);
@@ -326,6 +373,24 @@ void PackedReducer::PackData(const ThreadPrivateVector<OPTFLOAT> &Centers,const 
 
 }
 
+void PackedReducer::PackData(const ThreadPrivateVector<OPTFLOAT> &Centers, const ThreadPrivateVector<int> &Counts, const EXPFLOAT &Fit, const EXPFLOAT &Fit_pure)
+{
+	char *ptr=Buffer.GetData();
+	int nBytes=Centers.GetSize()*sizeof(OPTFLOAT);
+	memcpy(ptr,Centers.GetData(),nBytes);
+	ptr+=nBytes;
+
+	nBytes=Counts.GetSize()*sizeof(int);
+	memcpy(ptr,Counts.GetData(),nBytes);
+	ptr+=nBytes;
+
+	nBytes=sizeof(EXPFLOAT);
+	memcpy(ptr,&Fit,nBytes);
+	ptr+=nBytes;
+
+	memcpy(ptr,&Fit_pure,nBytes);
+}
+
 void PackedReducer::PackData(const ThreadPrivateVector<OPTFLOAT> &Centers,const ThreadPrivateVector<int> &Counts,const bool &Cont) {
 	char *ptr=Buffer.GetData();
 	int nBytes=Centers.GetSize()*sizeof(OPTFLOAT);
@@ -353,3 +418,9 @@ void PackedReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPriv
 	UnpackData(Centers,Counts,Fit);
 }
 
+
+void PackedReducer::ReduceData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {
+	PackData(Centers,Counts,Fit,Fit_pure);
+	MPI_Allreduce(MPI_IN_PLACE,Buffer.GetData(),1,Type,Op,MPI_COMM_WORLD);
+	UnpackData(Centers,Counts,Fit,Fit_pure);
+}

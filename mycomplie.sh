@@ -1,0 +1,1 @@
+make -j mpikmeans OPENMP=y OPT=y IOMP=y # LARGEVECTOR=y 

@@ -62,10 +62,10 @@ endif
 
 
 COMMONOPT=-c $(EXPFLOAT) $(OMP) -std=gnu++11 -DBRANCH=\"$(BRANCH)\"
-CC=icpc
-
+CC=icpx
+$(info [CC] CC = $(CC))
 ifeq ($(SCALASCA),y)
-CC=scorep --nocompiler icpc
+CC=scorep --nocompiler icpx
 mpikmeans : override CC=scorep --nocompiler mpicxx
 endif
 
@@ -142,8 +142,13 @@ endif
 
 
 COPT:=$(COPT) $(PROFOPT)
-LOPT:=$(LOPT) $(OMP) $(PROFOPT)
-
+ifeq ($(OPENMP),y)
+ifeq ($(IOMP),y)
+	LOPT:=$(LOPT) -liomp5 $(PROFOPT)
+else
+	LOPT:=$(LOPT) -fopenmp $(PROFOPT)
+endif
+endif
 
 UTIL_O = $(addprefix Util/, Array.o Dataset.o Debug.o Rand.o  StdDataset.o Partition.o NumaDataset.o NumaAlloc.o PrecisionTimer.o)
 CLUST_O= $(addprefix Clust/,KMeansInitializer.o CentroidVector.o KMAlgorithm.o  \
@@ -189,7 +194,7 @@ mpikmeans : $(UTIL_O) $(MPIKMA_O) MPIKmeans/main.o
 ifeq ($(VERBOSE),y)	
 	$(CC)   $^  $(LOPT) -lnuma -o $@
 else
-	@echo [CCLD] $@
+	@echo [CCLD] $(CC):$@ $(LOPT)
 	@$(CC) $^  -lnuma $(LOPT) -o $@
 endif	
 	mv mpikmeans Object/mpikmeans$(FIX3)$(FIX3a)$(FIX)_$(BRANCH)
