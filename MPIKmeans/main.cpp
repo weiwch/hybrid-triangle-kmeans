@@ -50,6 +50,7 @@ int b = ncl - 1;
 bool adaptiveDrake = false;
 int reducerparam=-1;
 double lambda=0.0; // default lambda value for NaiveKMA
+double rand_rate = 1.0; // default randomization rate for NaiveKMA
 std::string save_path = "./save";
 
 enum AlgorithmType {
@@ -82,7 +83,7 @@ void ProcessArgs(int argc, char *argv[])
 	int c;
 	int Rank;
 	MPI_Comm_rank(MPI_COMM_WORLD,&Rank);
-	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:I:d:Dt:s:l:"))!=-1){
+	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:I:d:Dt:s:l:N:"))!=-1){
 		switch(c) {
 			case 'C':
 				yykmcluster=false;
@@ -185,6 +186,13 @@ void ProcessArgs(int argc, char *argv[])
 					break;
 			case 'l':
 					lambda = atof(optarg);
+					break;
+			case 'N':
+					rand_rate = atof(optarg);
+					if (rand_rate < 0.0 || rand_rate > 1.0) {
+						kma_printf("%s is an invalid value of -R option\n", optarg);
+						ExitUsage();
+					}
 					break;
 			default: ExitUsage();
 					break;
@@ -527,6 +535,7 @@ double LocalKMeansBalanced(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinR
 	}
 
 	pKMA->Lambda = lambda; // set lambda for NaiveKMA
+	pKMA->rand_rate = rand_rate; // set randomization rate for NaiveKMA
 	double BestFit;
 
 	if (verbosity>4)
@@ -584,17 +593,17 @@ double LocalKMeansBalanced(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinR
 			fclose(ctf);
 		}
 		
-		FILE *asf = fopen((save_path + std::string("/assignments.bin")).c_str(), "wb");
-		if (asf == NULL) {
-			kma_printf("Cannot open assignments.bin for writing\n");
-			MPI_Finalize();
-			exit(0);
-		}else{
-			// write assignments to fbin
-			int totalRows = D.GetTotalRowCount();
-			fwrite(pKMA->Assignment.GetData(), sizeof(int), totalRows, asf);
-			fclose(asf);
-		}
+		// FILE *asf = fopen((save_path + std::string("/assignments.bin")).c_str(), "wb");
+		// if (asf == NULL) {
+		// 	kma_printf("Cannot open assignments.bin for writing\n");
+		// 	MPI_Finalize();
+		// 	exit(0);
+		// }else{
+		// 	// write assignments to fbin
+		// 	int totalRows = D.GetTotalRowCount();
+		// 	fwrite(pKMA->Assignment.GetData(), sizeof(int), totalRows, asf);
+		// 	fclose(asf);
+		// }
 
         if (verbosity>0)
 			kma_printf("Timing finished\n");

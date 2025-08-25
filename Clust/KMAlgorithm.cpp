@@ -6,6 +6,10 @@
 #include <unistd.h>
 #include <signal.h>
 #include <utility>
+#include <vector>       // Required for std::vector
+#include <numeric>      // Required for std::iota
+#include <algorithm>    // Required for std::shuffle
+#include <random>       // Required for std::mt19937 and std::random_device
 
 
 #include "../Util/OpenMP.h"
@@ -240,8 +244,19 @@ bool NaiveKMA::CorrectWithoutMSE(Array<OPTFLOAT> &vec, long *distanceCount) {
 }
 
 
-double NaiveKMA::ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount)
+double NaiveKMA::ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount){
+	if(rand_rate >= 1.0){
+		kma_printf("ComputeMSEAndCorrectImpl is called. No RAND kmeans.\n");
+		return ComputeMSEAndCorrectImpl(vec, distanceCount);
+	} else {
+		return ComputeMSEAndCorrectRandImpl(vec, distanceCount);
+	}
+}
+
+
+double NaiveKMA::ComputeMSEAndCorrectImpl(Array<OPTFLOAT> &vec, long *distanceCount)
 {
+	#pragma omp for simd
 	for(int i=0;i<nclusters*ncols;i++)
 		Center[i]=0.0;
 	// for(int i=0;i<nclusters;i++)
@@ -306,4 +321,129 @@ double NaiveKMA::ComputeMSEAndCorrect(Array<OPTFLOAT> &vec, long *distanceCount)
 	if (distanceCount!=NULL)
 		(*distanceCount)+=((long)Data.GetTotalRowCount()*nclusters);
 	return (double)fit/(double)Data.GetTotalRowCount();
+}
+
+double NaiveKMA::ComputeMSEAndCorrectRandImpl(Array<OPTFLOAT> &vec, long *distanceCount)
+{
+    // Ensure the sampling rate is within a valid range (0, 1].
+    if (rand_rate <= 0.0 || rand_rate > 1.0) {
+        // If the rate is > 1.0, it's safer to just run the full calculation.
+        if (rand_rate > 1.0) {
+            return ComputeMSEAndCorrectImpl(vec, distanceCount);
+        }
+        return 0.0; // Return 0 if no sampling is to be done.
+    }
+
+    // --- Initialization ---
+    // Zero out the aggregate center vectors before accumulation.
+	#pragma omp for simd
+    for(int i = 0; i < nclusters * ncols; i++)
+        Center[i] = 0.0;
+
+    // --- Data Sampling ---
+    // Determine the number of data points to sample on this MPI process.
+    long localRowCount = Data.GetRowCount();
+    long nSamples = (long)(localRowCount * rand_rate);
+    
+    // Ensure at least one point is sampled if data exists.
+    if (nSamples == 0 && localRowCount > 0) {
+        nSamples = 1;
+    }
+
+    // Create a vector of indices [0, 1, 2, ..., N-1].
+    std::vector<int> indices(localRowCount);
+    std::iota(indices.begin(), indices.end(), 0);
+
+    // Shuffle the indices to create a random sample.
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(indices.begin(), indices.end(), g);
+
+    // --- Parallel K-Means Calculation ---
+    EXPFLOAT fit = (EXPFLOAT)0.0;
+    EXPFLOAT fit_pure_sse = (EXPFLOAT)0.0;
+    EXPFLOAT w = (EXPFLOAT)Lambda * prev_fit / (EXPFLOAT)Data.GetTotalRowCount() * nclusters / Data.GetColCount();
+    
+    if (Lambda > 0.0)
+        kma_printf("Lambda: %g, w: %g, prev_fit: %g\n", Lambda, w, prev_fit);
+
+#pragma omp parallel shared(vec, indices) reduction(+:fit, fit_pure_sse)
+    {
+        fit = 0.0;
+        int ThreadId = omp_get_thread_num();
+        ThreadPrivateVector<OPTFLOAT> &myCenter = pOMPReducer->GetThreadCenter(ThreadId);
+        ThreadPrivateVector<int> &myCounts = pOMPReducer->GetThreadCounts(ThreadId);
+        ThreadPrivateVector<OPTFLOAT> &tpRow = OMPData[ThreadId].row;
+
+        pOMPReducer->ClearThreadData(ThreadId);
+
+        // Loop over the *sampled* indices, not the entire dataset.
+#pragma omp for OMPDYNAMIC
+        for(long i = 0; i < nSamples; i++) {
+            int rowIndex = indices[i]; // Get the actual row index from the shuffled list.
+            CV.ConvertToOptFloat(tpRow, Data.GetRowNew(rowIndex));
+            
+            OPTFLOAT minssq = std::numeric_limits<OPTFLOAT>::max();
+            OPTFLOAT minsse = std::numeric_limits<OPTFLOAT>::max();
+            int bestj = -1;
+            
+            // Find the best cluster for the current data point.
+            for(int j = 0; j < nclusters; j++) {
+                OPTFLOAT sse = CV.SquaredDistance(j, vec, tpRow);
+                OPTFLOAT ssq = sse + w * Counts[j]; // 'Counts' is from the previous iteration for regularization.
+                if (ssq < minssq) {
+                    minssq = ssq;
+                    minsse = sse;
+                    bestj = j;
+                }
+            }
+            
+            // Accumulate error and update thread-local centers and counts.
+            fit += minssq;
+            fit_pure_sse += minsse;
+            myCounts[bestj]++;
+            CV.AddRow(bestj, myCenter, tpRow);
+        }
+    }
+
+    // --- Reduction and Aggregation ---
+    // Reset global counts before reduction.
+    #pragma omp for simd
+    for(int i = 0; i < nclusters; i++)
+        Counts[i] = 0;
+    
+    // Reduce data from all threads into the global 'Center' and 'Counts' arrays.
+    pOMPReducer->ReduceToArrays(Center, Counts);
+    // Reduce data across all MPI processes.
+    ReduceMPIData(Center, Counts, fit, fit_pure_sse);
+
+    // --- Update Centers and Finalize Metrics ---
+    // Calculate total samples across all MPI processes to correctly normalize the MSE.
+    long totalSamples = (long)(Data.GetTotalRowCount() * rand_rate);
+    if (totalSamples == 0 && Data.GetTotalRowCount() > 0) {
+        totalSamples = 1; // Avoid division by zero.
+    }
+
+    // The MSE is the total error divided by the number of points used to calculate it.
+    double mse = (totalSamples > 0) ? (double)fit / (double)totalSamples : 0.0;
+    prev_fit = (totalSamples > 0) ? fit_pure_sse / (double)totalSamples : 0.0;
+    
+    kma_printf("Fit (Sampled): %g, Pure MSE (Sampled): %g\n", mse, prev_fit);
+
+    // Update the centroids based on the mean of the points assigned to each cluster from the sample.
+    for(int i = 0; i < nclusters; i++) {
+        if (Counts[i] > 0) {
+            double f = 1.0 / Counts[i];
+            for(int j = ncols * i; j < ncols * (i + 1); j++)
+                vec[j] = Center[j] * f;
+        } else {
+            // If a cluster became empty, repair it.
+            pRepair->RepairVec(vec, i);
+        }
+    }
+
+    if (distanceCount != NULL)
+        (*distanceCount) += (totalSamples * nclusters);
+
+    return mse;
 }

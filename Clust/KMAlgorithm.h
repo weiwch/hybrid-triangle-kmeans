@@ -95,6 +95,7 @@ public:
 	LargeVector<int> Assignment;
 	double Lambda;
 	double prev_fit = 0.0; // previous fit value
+	double rand_rate = 0.0; // rate of randomization
 protected:
 
 	/// The centroids of the new clusters
@@ -115,6 +116,8 @@ protected:
 	/// Future Data reduction for version MPI, now empty
 	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,EXPFLOAT &Fit, EXPFLOAT &Fit_pure) {}
 	virtual void ReduceMPIData(ThreadPrivateVector<OPTFLOAT> &Centers,ThreadPrivateVector<int> &Counts,bool &bCont) {}
+	double ComputeMSEAndCorrectImpl(Array<OPTFLOAT> &vec, long *distanceCount=NULL);
+	double ComputeMSEAndCorrectRandImpl(Array<OPTFLOAT> &vec, long *distanceCount=NULL);
 public:
 	virtual void PrintNumaLocalityInfo();
 	virtual bool CorrectWithoutMSE(Array<OPTFLOAT> &vec, long *distanceCount);
