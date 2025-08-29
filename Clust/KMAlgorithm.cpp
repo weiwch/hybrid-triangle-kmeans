@@ -75,7 +75,7 @@ void signal_handler(int sig) {
 }
 
 
-double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double MinRel,int MaxIter)
+double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double MinRel,int MaxIter, int MinIter)
 {
 	ASSERT(vec.GetSize()==ncols*nclusters);
 	volatile double diff;
@@ -109,6 +109,7 @@ double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double Min
 		kma_printf("Iteration %d, distanceCount: %ld, distanceCalculationsRatio: %lf\n",i, distanceCount, distanceCalculationsRatio);
         distanceCalculationsRatioSum += distanceCalculationsRatio;
 		double Rel=(BestFit-Fit)/BestFit;
+		
 		if (Fit<nextafter(Fit,BestFit) ) {
 			BestFit=Fit;
 			if (verbosity>3)
@@ -116,7 +117,16 @@ double KMeansAlgorithm::RunKMeans(Array<OPTFLOAT> &vec, int verbosity,double Min
 			if (verbosity>4 && pReportWriter!=NULL)
 				pReportWriter->IterationReport(vec,i);
 
-		} else break;
+		} else {
+			if(i<MinIter){
+				continue;
+			}else{
+				break;
+			}
+		}
+		if(i<MinIter){
+			continue;
+		}
 		if (MinRel>0.0 && MinRel>Rel) break;
 		if (MaxIter>0 && i==MaxIter-1)
 			break;
@@ -282,20 +292,20 @@ double NaiveKMA::ComputeMSEAndCorrectImpl(Array<OPTFLOAT> &vec, long *distanceCo
 #pragma omp for OMPDYNAMIC
 		for(int i=0;i<Data.GetRowCount();i++) {
 			CV.ConvertToOptFloat(tpRow,Data.GetRowNew(i)); // CV: CentroidVector
-			OPTFLOAT minssq=std::numeric_limits<OPTFLOAT>::max();
 			OPTFLOAT minsse=std::numeric_limits<OPTFLOAT>::max();
+			OPTFLOAT minssq=std::numeric_limits<OPTFLOAT>::max();
 			int bestj=-1;
 			for(int j=0;j<nclusters;j++) {
-				OPTFLOAT sse=CV.SquaredDistance(j,vec,tpRow);
-				OPTFLOAT ssq= sse + w*Counts[j];
-				if (ssq<minssq) {
-					minssq = ssq;
+				OPTFLOAT ssq=CV.SquaredDistance(j,vec,tpRow);
+				OPTFLOAT sse= ssq + w*Counts[j];
+				if (sse<minsse) {
 					minsse = sse;
+					minssq = ssq;
 					bestj=j;
 				}
 			}
-			fit+=minssq;
-			fit_pure_sse+=minsse;
+			fit+=minsse;
+			fit_pure_sse+=minssq;
 			myCounts[bestj]++;
 			CV.AddRow(bestj,myCenter,tpRow);
 		}
@@ -383,23 +393,23 @@ double NaiveKMA::ComputeMSEAndCorrectRandImpl(Array<OPTFLOAT> &vec, long *distan
             int rowIndex = indices[i]; // Get the actual row index from the shuffled list.
             CV.ConvertToOptFloat(tpRow, Data.GetRowNew(rowIndex));
             
-            OPTFLOAT minssq = std::numeric_limits<OPTFLOAT>::max();
             OPTFLOAT minsse = std::numeric_limits<OPTFLOAT>::max();
+            OPTFLOAT minssq = std::numeric_limits<OPTFLOAT>::max();
             int bestj = -1;
             
             // Find the best cluster for the current data point.
             for(int j = 0; j < nclusters; j++) {
-                OPTFLOAT sse = CV.SquaredDistance(j, vec, tpRow);
-                OPTFLOAT ssq = sse + w * Counts[j]; // 'Counts' is from the previous iteration for regularization.
-                if (ssq < minssq) {
+                OPTFLOAT ssq = CV.SquaredDistance(j, vec, tpRow);
+                OPTFLOAT sse = ssq + w * Counts[j]; // 'Counts' is from the previous iteration for regularization.
+                if (ssq < minsse) {
+                    minsse = ssq;
                     minssq = ssq;
-                    minsse = sse;
                     bestj = j;
                 }
             }
             
             // Accumulate error and update thread-local centers and counts.
-            fit += minssq;
+            fit += minsse;
             fit_pure_sse += minsse;
             myCounts[bestj]++;
             CV.AddRow(bestj, myCenter, tpRow);

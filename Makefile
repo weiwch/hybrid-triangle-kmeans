@@ -169,8 +169,15 @@ Util/StdOut.o
 
 
 
-
-
+mpikmeans : $(UTIL_O) $(MPIKMA_O) MPIKmeans/main.o
+ifeq ($(VERBOSE),y)	
+	$(CC)   $^  $(LOPT) -lnuma -o $@
+else
+	@echo [CCLD] $(CC):$@ $(LOPT)
+	@$(CC) $^  -lnuma $(LOPT) -o $@
+endif	
+	mv mpikmeans ../../binary/distri_indexer
+# mv mpikmeans Object/mpikmeans$(FIX3)$(FIX3a)$(FIX)_$(BRANCH)
 
 kmeans : $(UTIL_O) $(CLUST_O) Clust/mainkm.o
 ifeq ($(VERBOSE),y)	
@@ -190,14 +197,7 @@ else
 endif	
 	mv kminit Object/kminit$(FIX3)$(FIX3a)$(FIX)_$(BRANCH)
 
-mpikmeans : $(UTIL_O) $(MPIKMA_O) MPIKmeans/main.o
-ifeq ($(VERBOSE),y)	
-	$(CC)   $^  $(LOPT) -lnuma -o $@
-else
-	@echo [CCLD] $(CC):$@ $(LOPT)
-	@$(CC) $^  -lnuma $(LOPT) -o $@
-endif	
-	mv mpikmeans Object/mpikmeans$(FIX3)$(FIX3a)$(FIX)_$(BRANCH)
+
 	
 
 clean:

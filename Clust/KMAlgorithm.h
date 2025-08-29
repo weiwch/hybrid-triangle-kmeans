@@ -58,7 +58,7 @@ public:
 
 	KMeansAlgorithm(CentroidVector &aCV,StdDataset &Data,CentroidRepair *pR);
 	/// Runs the KMeans algorithm (with default MinRel until termination)
-	virtual double RunKMeans(Array<OPTFLOAT> &vec,int verbosity,double MinRel=-1,int MaxIter=0);
+	virtual double RunKMeans(Array<OPTFLOAT> &vec,int verbosity,double MinRel=-1,int MaxIter=0,int MinIter=0);
 
 	/// Runs the KMeans algorithm with stochastic relaxation
 	virtual double RunKMeansWithSR(Array<OPTFLOAT> &vec, bool print,double MaxTime);

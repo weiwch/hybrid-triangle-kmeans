@@ -46,6 +46,7 @@ double minrel=-1.0;
 int groups=-1;
 bool yykmcluster=true;
 int maxiter=0;
+int miniter=0;
 int b = ncl - 1;
 bool adaptiveDrake = false;
 int reducerparam=-1;
@@ -83,7 +84,7 @@ void ProcessArgs(int argc, char *argv[])
 	int c;
 	int Rank;
 	MPI_Comm_rank(MPI_COMM_WORLD,&Rank);
-	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:I:d:Dt:s:l:N:"))!=-1){
+	while ((c=getopt(argc,argv,"b:CG:mn:r:c:v:E:e:a:h:R:p:M:i:I:d:Dt:s:l:N:"))!=-1){
 		switch(c) {
 			case 'C':
 				yykmcluster=false;
@@ -138,6 +139,9 @@ void ProcessArgs(int argc, char *argv[])
 						ExitUsage();
 					}
 					break;
+			case 'i':
+					miniter=atoi(optarg);
+					break;					
 			case 'c':
 					ncl=atoi(optarg);
 					if (ncl<=0) {
@@ -565,7 +569,7 @@ double LocalKMeansBalanced(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinR
 			pKMANoMSE->RunKMeansWithoutMSE(vec,verbosity);
 			BestFit=0.0;
 		} else
-			BestFit = pKMA->RunKMeans(vec, verbosity, MinRel,maxiter);
+			BestFit = pKMA->RunKMeans(vec, verbosity, MinRel,maxiter,miniter);
 		MPI_Barrier(MPI_COMM_WORLD);
 		double extime2_monotonic=TMonotonic.GetTimeDiff();
         double extime2_thread=TThread.GetTimeDiff();
@@ -580,7 +584,7 @@ double LocalKMeansBalanced(DynamicArray<OPTFLOAT> &vec,int verbosity,double MinR
 				exit(0);
 			}
 		}
-		FILE *ctf = fopen((save_path + std::string("/centroids.bin")).c_str(), "wb");
+		FILE *ctf = fopen((save_path + std::string("/centroids.fbin")).c_str(), "wb");
 		if (ctf == NULL) {
 			kma_printf("Cannot open centroids.bin for writing\n");
 			MPI_Finalize();
